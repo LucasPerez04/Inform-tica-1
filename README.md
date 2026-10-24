@@ -1,15 +1,17 @@
-# Trabajo Práctico – Informática I
+# Trabajo Práctico – Informática I (Clases 9-10)
 
 Dos proyectos que aplican a la vida real lo visto en clase: **autómatas**, **análisis léxico** y **semántica**.
 
 ## Índice
 
-1. [Validador de formularios con autómatas](#1-validador-de-formularios-con-autómatas)
-2. [Mini-compilador / validador de expresiones](#2-mini-compilador--validador-de-expresiones)
+1. [Validador de formularios con autómatas](./Validador%20de%20formularios%20con%20aut%C3%B3matas/)
+2. [Mini-compilador_validador de expresiones](./Mini-compilador_validador%20de%20expresiones/)
 
 ---
 
 ## 1. Validador de formularios con autómatas
+
+📁 Carpeta: [`Validador de formularios con autómatas`](./Validador%20de%20formularios%20con%20aut%C3%B3matas/) · Lenguaje: **C**
 
 ### Descripción
 
@@ -33,7 +35,9 @@ Menú con 4 validadores. Cada uno es un **DFA (autómata finito determinista)** 
 
 ---
 
-## 2. Mini-compilador / validador de expresiones
+## 2. Mini-compilador_validador de expresiones
+
+📁 Carpeta: [`Mini-compilador_validador de expresiones`](./Mini-compilador_validador%20de%20expresiones/) · Lenguaje: **C**
 
 ### Descripción
 

@@ -1,0 +1,135 @@
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+#define E -1
+#define NCLASES 8
+
+enum { C_CERO, C_NUEVE, C_DIG, C_LET, C_ARROBA, C_PUNTO, C_SEP, C_OTRO };
+
+int clasificar(char c) {
+    if (c == '0') return C_CERO;
+    if (c == '9') return C_NUEVE;
+    if (isdigit((unsigned char)c)) return C_DIG;
+    if (isalpha((unsigned char)c)) return C_LET;
+    if (c == '@') return C_ARROBA;
+    if (c == '.') return C_PUNTO;
+    if (c == '-' || c == '_') return C_SEP;
+    return C_OTRO;
+}
+
+typedef struct {
+    const char *nombre;
+    const char *ejemplo;
+    const char *ignorar;
+    int tabla[12][NCLASES];
+    int aceptacion[12];          
+} DFA;
+
+DFA validadores[] = {
+    { /* 1. CEDULA: 6 o 7 digitos (se ignoran los puntos: 1.234.567) */
+      "Cedula de identidad", "1.234.567", ".",
+      { {1,1,1,E,E,E,E,E},  
+        {2,2,2,E,E,E,E,E},  
+        {3,3,3,E,E,E,E,E},  
+        {4,4,4,E,E,E,E,E},  
+        {5,5,5,E,E,E,E,E},  
+        {6,6,6,E,E,E,E,E},  
+        {7,7,7,E,E,E,E,E},  
+        {E,E,E,E,E,E,E,E} },
+      {0,0,0,0,0,0,1,1}
+    },
+    { /* 2. TELEFONO celular: 09 + 8 digitos (se ignoran espacios y guiones) */
+      "Telefono celular", "0981 123 456", " -",
+      { {1,E,E,E,E,E,E,E},  
+        {E,2,E,E,E,E,E,E},  
+        {3,3,3,E,E,E,E,E},  
+        {4,4,4,E,E,E,E,E},  
+        {5,5,5,E,E,E,E,E},  
+        {6,6,6,E,E,E,E,E},  
+        {7,7,7,E,E,E,E,E},  
+        {8,8,8,E,E,E,E,E},  
+        {9,9,9,E,E,E,E,E},  
+        {10,10,10,E,E,E,E,E},
+        {E,E,E,E,E,E,E,E} },
+      {0,0,0,0,0,0,0,0,0,0,1}
+    },
+    { /* 3. EMAIL: local@dominio.ext */
+      "Correo electronico", "lucas@gmail.com", "",
+      { {1,1,1,1,E,E,E,E},  
+        {1,1,1,1,2,1,1,E},  
+        {3,3,3,3,E,E,E,E},  
+        {3,3,3,3,E,4,3,E},  
+        {5,5,5,5,E,E,E,E},  
+        {5,5,5,5,E,4,3,E} },
+      {0,0,0,0,0,1}
+    },
+    { /* 4. PLACA: 3 o 4 letras + 3 digitos (ABC 123 / ABCD 123) */
+      "Placa de vehiculo", "ABCD 123", " -",
+      { {E,E,E,1,E,E,E,E},  
+        {E,E,E,2,E,E,E,E},  
+        {E,E,E,3,E,E,E,E},  
+        {5,5,5,4,E,E,E,E},  
+        {5,5,5,E,E,E,E,E},  
+        {6,6,6,E,E,E,E,E},  
+        {7,7,7,E,E,E,E,E},  
+        {E,E,E,E,E,E,E,E} },
+      {0,0,0,0,0,0,0,1}
+    }
+};
+
+#define NVALIDADORES (int)(sizeof(validadores) / sizeof(validadores[0]))
+
+void normalizar(const char *src, char *dst, const char *ignorar) {
+    int j = 0;
+    for (int i = 0; src[i] != '\0'; i++)
+        if (!strchr(ignorar, src[i]) || ignorar[0] == '\0')
+            dst[j++] = src[i];
+    dst[j] = '\0';
+}
+
+int ejecutar(const DFA *d, const char *entrada) {
+    char limpio[100];
+    normalizar(entrada, limpio, d->ignorar);
+
+    int estado = 0;
+    printf("  Recorrido: q0");
+    for (int i = 0; limpio[i] != '\0'; i++) {
+        estado = d->tabla[estado][clasificar(limpio[i])];
+        if (estado == E) {
+            printf(" -> ERROR en '%c'\n", limpio[i]);
+            return 0;
+        }
+        printf(" -> q%d", estado);
+    }
+    printf("\n");
+    return d->aceptacion[estado];
+}
+
+int main(void) {
+    int opcion;
+    char buffer[100];
+
+    do {
+        printf("\n===== VALIDADOR DE FORMULARIOS (DFA) =====\n");
+        for (int i = 0; i < NVALIDADORES; i++)
+            printf("%d. %s (ej. %s)\n", i + 1, validadores[i].nombre, validadores[i].ejemplo);
+        printf("0. Salir\nOpcion: ");
+
+        if (scanf("%d", &opcion) != 1) break;
+        getchar();
+
+        if (opcion >= 1 && opcion <= NVALIDADORES) {
+            const DFA *d = &validadores[opcion - 1];
+            printf("Ingrese %s: ", d->nombre);
+            fgets(buffer, sizeof(buffer), stdin);
+            buffer[strcspn(buffer, "\n")] = 0;
+
+            printf("  %s\n", ejecutar(d, buffer) ? "Resultado: VALIDO (ACEPTADA)"
+                                                  : "Resultado: INVALIDO (RECHAZADA)");
+        } else if (opcion != 0) {
+            printf("Opcion no valida.\n");
+        }
+    } while (opcion != 0);
+
+    return 0;
+}

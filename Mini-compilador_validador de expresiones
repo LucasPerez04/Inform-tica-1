@@ -1,0 +1,260 @@
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+#include <stdlib.h>
+
+#define MAX_TOKENS 64
+#define MAX_VARS 20
+#define MAX_NOMBRE 32
+
+typedef enum { T_NUM, T_ID, T_OP, T_LPAR, T_RPAR, T_ASIGN, T_VAR, T_FIN } TipoToken;
+
+typedef struct {
+    TipoToken tipo;
+    char texto[MAX_NOMBRE];
+    double valor;
+} Token;
+
+Token toks[MAX_TOKENS];
+int ntoks, pos, error;
+
+char nombres[MAX_VARS][MAX_NOMBRE];
+double valores[MAX_VARS];
+int cantidad = 0;
+
+int buscar(const char *nombre) {
+    for (int i = 0; i < cantidad; i++)
+        if (strcmp(nombres[i], nombre) == 0) return i;
+    return -1;
+}
+
+void fallar(const char *tipo, const char *msg) {
+    if (!error) printf("[ERROR %s] %s\n", tipo, msg);
+    error = 1;
+}
+
+/* ---------- Analisis lexico ---------- */
+
+void agregar(TipoToken tipo, const char *texto, double valor) {
+    toks[ntoks].tipo = tipo;
+    strncpy(toks[ntoks].texto, texto, MAX_NOMBRE - 1);
+    toks[ntoks].texto[MAX_NOMBRE - 1] = '\0';
+    toks[ntoks].valor = valor;
+    ntoks++;
+}
+
+int tokenizar(const char *s) {
+    int i = 0;
+    ntoks = 0;
+    printf("\n-- Tokens --\n");
+
+    while (s[i] != '\0') {
+        char c = s[i];
+        char buf[MAX_NOMBRE];
+        int j = 0;
+
+        if (ntoks >= MAX_TOKENS - 1) {
+            fallar("Lexico", "Expresion demasiado larga");
+            return 0;
+        }
+
+        if (isspace((unsigned char)c)) {
+            i++;
+        } else if (isdigit((unsigned char)c) || c == '.') {
+            while ((isdigit((unsigned char)s[i]) || s[i] == '.') && j < MAX_NOMBRE - 1)
+                buf[j++] = s[i++];
+            buf[j] = '\0';
+            agregar(T_NUM, buf, strtod(buf, NULL));
+            printf("NUMERO        | %s\n", buf);
+        } else if (isalpha((unsigned char)c) || c == '_') {
+            while ((isalnum((unsigned char)s[i]) || s[i] == '_') && j < MAX_NOMBRE - 1)
+                buf[j++] = s[i++];
+            buf[j] = '\0';
+            if (strcmp(buf, "var") == 0) {
+                agregar(T_VAR, buf, 0);
+                printf("PALABRA CLAVE | %s\n", buf);
+            } else {
+                agregar(T_ID, buf, 0);
+                printf("IDENTIFICADOR | %s\n", buf);
+            }
+        } else if (strchr("+-*/", c)) {
+            buf[0] = c; buf[1] = '\0';
+            agregar(T_OP, buf, 0);
+            printf("OPERADOR      | %c\n", c);
+            i++;
+        } else if (c == '=') {
+            agregar(T_ASIGN, "=", 0);
+            printf("ASIGNACION    | =\n");
+            i++;
+        } else if (c == '(') {
+            agregar(T_LPAR, "(", 0);
+            printf("PAREN_IZQ     | (\n");
+            i++;
+        } else if (c == ')') {
+            agregar(T_RPAR, ")", 0);
+            printf("PAREN_DER     | )\n");
+            i++;
+        } else {
+            char msg[64];
+            snprintf(msg, sizeof(msg), "Simbolo no reconocido '%c'", c);
+            fallar("Lexico", msg);
+            return 0;
+        }
+    }
+    agregar(T_FIN, "", 0);
+    return 1;
+}
+
+/* ---------- Sintaxis + semantica ---------- */
+
+double expresion(void);
+
+double factor(void) {
+    if (error) return 0;
+    Token t = toks[pos];
+
+    if (t.tipo == T_NUM) {
+        pos++;
+        return t.valor;
+    }
+    if (t.tipo == T_ID) {
+        int idx = buscar(t.texto);
+        if (idx < 0) {
+            char msg[80];
+            snprintf(msg, sizeof(msg), "Identificador no declarado: '%s'", t.texto);
+            fallar("Semantico", msg);
+            return 0;
+        }
+        pos++;
+        return valores[idx];
+    }
+    if (t.tipo == T_LPAR) {
+        pos++;
+        double v = expresion();
+        if (error) return 0;
+        if (toks[pos].tipo != T_RPAR) {
+            fallar("Sintactico", "Falta cerrar parentesis");
+            return 0;
+        }
+        pos++;
+        return v;
+    }
+    if (t.tipo == T_OP && t.texto[0] == '-') {
+        pos++;
+        return -factor();
+    }
+    fallar("Sintactico", "Se esperaba un numero, variable o '('");
+    return 0;
+}
+
+double termino(void) {
+    double v = factor();
+    while (!error && toks[pos].tipo == T_OP &&
+           (toks[pos].texto[0] == '*' || toks[pos].texto[0] == '/')) {
+        char op = toks[pos++].texto[0];
+        double d = factor();
+        if (error) return 0;
+        if (op == '*') {
+            v *= d;
+        } else {
+            if (d == 0) {
+                fallar("Semantico", "Division por cero");
+                return 0;
+            }
+            v /= d;
+        }
+    }
+    return v;
+}
+
+double expresion(void) {
+    double v = termino();
+    while (!error && toks[pos].tipo == T_OP &&
+           (toks[pos].texto[0] == '+' || toks[pos].texto[0] == '-')) {
+        char op = toks[pos++].texto[0];
+        double d = termino();
+        if (error) return 0;
+        v = (op == '+') ? v + d : v - d;
+    }
+    return v;
+}
+
+void ejecutar_linea(const char *linea) {
+    error = 0;
+    pos = 0;
+    if (!tokenizar(linea)) return;
+    if (toks[0].tipo == T_FIN) return;
+
+    printf("\n-- Analisis --\n");
+
+    if (toks[0].tipo == T_VAR) {
+        if (toks[1].tipo != T_ID || toks[2].tipo != T_ASIGN) {
+            fallar("Sintactico", "Uso correcto: var nombre = expresion");
+            return;
+        }
+        char nombre[MAX_NOMBRE];
+        strcpy(nombre, toks[1].texto);
+        pos = 3;
+        double v = expresion();
+        if (!error && toks[pos].tipo != T_FIN) fallar("Sintactico", "Sobran simbolos al final");
+        if (error) return;
+        if (buscar(nombre) >= 0) {
+            fallar("Semantico", "Variable ya declarada");
+            return;
+        }
+        if (cantidad >= MAX_VARS) {
+            fallar("Semantico", "Tabla de simbolos llena");
+            return;
+        }
+        strcpy(nombres[cantidad], nombre);
+        valores[cantidad++] = v;
+        printf("[OK] Declarada: %s = %g\n", nombre, v);
+    } else if (toks[0].tipo == T_ID && toks[1].tipo == T_ASIGN) {
+        int idx = buscar(toks[0].texto);
+        if (idx < 0) {
+            char msg[80];
+            snprintf(msg, sizeof(msg), "Identificador no declarado: '%s'", toks[0].texto);
+            fallar("Semantico", msg);
+            return;
+        }
+        pos = 2;
+        double v = expresion();
+        if (!error && toks[pos].tipo != T_FIN) fallar("Sintactico", "Sobran simbolos al final");
+        if (error) return;
+        valores[idx] = v;
+        printf("[OK] %s = %g\n", toks[0].texto, v);
+    } else {
+        double v = expresion();
+        if (!error && toks[pos].tipo != T_FIN) fallar("Sintactico", "Sobran simbolos al final");
+        if (error) return;
+        printf("[OK] Resultado: %g\n", v);
+    }
+}
+
+void mostrar_tabla(void) {
+    printf("\n-- Tabla de simbolos --\n");
+    if (cantidad == 0) printf("(vacia)\n");
+    for (int i = 0; i < cantidad; i++)
+        printf("%-12s | %g\n", nombres[i], valores[i]);
+}
+
+int main(void) {
+    char linea[128];
+
+    printf("MINI-COMPILADOR  (var x = 5 | x = x + 1 | 2 * (x + 3))\n");
+    printf("Comandos: tabla, salir\n");
+
+    while (1) {
+        printf("\n> ");
+        if (!fgets(linea, sizeof(linea), stdin)) break;
+        linea[strcspn(linea, "\n")] = '\0';
+
+        if (strcmp(linea, "salir") == 0) break;
+        if (strcmp(linea, "tabla") == 0) {
+            mostrar_tabla();
+            continue;
+        }
+        ejecutar_linea(linea);
+    }
+    return 0;
+}
